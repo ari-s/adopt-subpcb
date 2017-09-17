@@ -75,8 +75,9 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
                 raise ValueError('%s with " at one end'%v)
         return ans.format(os.path.normpath('/'.join(p)))
 
+    # TODO: should be doable without deepcopy
     merged = master
-    child = copy.copy(child)
+    child = copy.deepcopy(child)
 
     # check whether the child we got is in the netlist
     # kicad_pcb is considered corresponding to a netlist
@@ -130,7 +131,7 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
     #   the master's module has the child's path prepended by
     def obtain_from_child(master,child,name,onlythese=None):
         mis = master(name)
-        cis = child(name)
+        cis = list(map(copy.deepcopy,child(name)))
         if len(mis) != len(cis):
             raise ValueError('master and child have unequal many vertices of name %s'%name)
         for mi,ci in zip(mis,cis):
@@ -188,16 +189,6 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
         orderedmerged.extend(merged(name))
     return orderedmerged
 
-def test():
-    child = s_file_parse('test-rc/rc.kicad_pcb')
-    master = s_file_parse('test-rc/2x rc.kicad_pcb')
-    netlist = s_file_parse('test-rc/2x rc.net')
-    merged = adopt_subdesign(master, child, netlist, 10, 20)
-    child = s_file_parse('test-rc/rc.kicad_pcb')
-    merged = adopt_subdesign(master, child, netlist, 30, 20,instance=1)
-    s_file_write(merged,'/tmp/merged.kicad_pcb')
-
-
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
@@ -218,7 +209,7 @@ if __name__ == '__main__':
     subdesign = s_file_parse(args.subdesign)
     netlist = s_file_parse(args.netlist)
     if args.instance is not None:
-        product = adopt_subdesign(product,subdesign,netlist,*args.DxDy,args.instance)
+        product = adopt_subdesign(product,subdesign,netlist,*args.DxDy,instance=args.instance)
     else:
         i=0
         while True:
