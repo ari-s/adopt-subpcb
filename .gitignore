@@ -1,0 +1,4 @@
+__pycache__/
+test-rc/*.bak
+test-rc/*cache.lib
+test-rc/*.kicad_pcb-bak
