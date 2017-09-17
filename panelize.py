@@ -95,12 +95,12 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
 
     if not isinstance(instance,int):
         # get intent by path / name
-        instance_index = [ i for i,(s,c) in enumerate(candidates) if s.get_unique('name') == instance ]
+        instance_index = [ i for i,(s,c) in enumerate(candidates) if s.get_unique('name')[0][1:-1] == instance ]
 
         # get intent by tstamp
-        instance_index.extend( i for i,(s,c) in enumerate(candidates) if s.get_unique('tstamps')[1:-2] == instance )
+        instance_index.extend( i for i,(s,c) in enumerate(candidates) if s.get_unique('tstamps')[0][1:-1] == instance )
 
-        if len(instance_index !=  1):
+        if len(instance_index) !=  1:
             raise ValueError('Did not find exactly one candidate sheet')
         instance = instance_index[0]
 
@@ -164,7 +164,6 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
         obtain_from_child(mmod, cmod, 'fp_text',('layer','at'))
         move(mmod, 'at')
         merged[mmod.parentpos] = mmod
-    print('moved %i modules'%i)
     # done adding modules
 
 
@@ -187,10 +186,9 @@ def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
     orderedmerged = namedlist(merged.name)
     for name in ordering:
         orderedmerged.extend(merged(name))
-
     return orderedmerged
 
-if __name__ == '__main__':
+def test():
     child = s_file_parse('test-rc/rc.kicad_pcb')
     master = s_file_parse('test-rc/2x rc.kicad_pcb')
     netlist = s_file_parse('test-rc/2x rc.net')
@@ -198,4 +196,48 @@ if __name__ == '__main__':
     child = s_file_parse('test-rc/rc.kicad_pcb')
     merged = adopt_subdesign(master, child, netlist, 30, 20,instance=1)
     s_file_write(merged,'/tmp/merged.kicad_pcb')
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    arg = parser.add_argument
+    arg('product', type=argparse.FileType('r+'),help='Product to adopt subdesign into (kicad_pcb)')
+    arg('subdesign', type=argparse.FileType('r'),help='Subdesign (kicad_pcb)')
+    arg('netlist', type=argparse.FileType('r'),help='netlist for the product')
+    arg('DxDy', type=float, help='move (first) Subdesign instance by (Dx,Dy)', nargs=2)
+    arg('dx', type=float, default=None, help='x-spacing of subdesign instances (default Dx)',nargs='?')
+    arg('dy', type=float, default=0, help='y-spacing of subdesign instances (default 0)',nargs='?')
+    arg('--instance', type=str, default=None, help='specify the subdesign instance you want to adopt (sheetname, integer or list thereof)')
+    arg('--out','-o', type=argparse.FileType('x'),help='write to this file instead of overwriting product', default=None)
+
+    args = parser.parse_args()
+    if args.dx is None:
+        args.dx = args.DxDy[0]
+    product = s_file_parse(args.product)
+    subdesign = s_file_parse(args.subdesign)
+    netlist = s_file_parse(args.netlist)
+    if args.instance is not None:
+        product = adopt_subdesign(product,subdesign,netlist,*args.DxDy,args.instance)
+    else:
+        i=0
+        while True:
+            Dx = args.DxDy[0] + i*args.dx
+            Dy = args.DxDy[1] + i*args.dy
+            try:
+                product = adopt_subdesign(product,subdesign,netlist,Dx,Dy,i)
+            except IndexError:
+                break
+            else:
+                i+=1
+
+    if args.out is not None:
+        args.product.close()
+        args.product = args.out
+    else:
+        args.product.seek(0)
+
+    s_file_write(product,args.product)
+
+
 

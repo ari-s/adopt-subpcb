@@ -1,12 +1,10 @@
 #!/usr/bin/python3
 
-
-
 from collections import defaultdict, namedtuple, OrderedDict
 
 class namedlist(list):
     '''list with a name'''
-    def __init__(self, name, *content,parentpos=None):
+    def __init__(self, name, *content, parentpos=None):
         self.name = str(name)
         list.__init__(self, content)
 
