@@ -9,26 +9,36 @@
 
 # reversal of the file_formats:
 # unix timestamps... what would possibly go wrong if one were to add faster 1/s?
-# .sch:
-#  AR PATH= contains subsch_timestamp/part_timestamp + Ref
 # .kicad_pcb:
 # ($class $content)-hierarchy, opens with (kicad_pcb content)
 # ignore classes: general, page, layers, setup
 # merge classes appropriately: net, net_class
 # append: module_s, segment, via,
 #          ToDo: and probably others
-# place at appropriate offset
-#
-# unclear: general...
 
 import re
-from s_parse import s_file_parse, namedlist
+from s_parse import s_file_parse, s_file_write, namedlist
 import os.path
+import copy
 
-def append(master,child, netlist, Dx, Dy, instance=0):
+def adopt_subdesign(product, subdesign, netlist, Dx, Dy, instance=0):
+    '''adopts the pcb artwork for subdesign into product.
+    to do this for another instance of subdesign instead of the first, specify the instance:
+    most conveniently by either by its position in the netlist,
+    this facilate reuse of an existing design for some subcomponent of a pcb (power supply for instance) for the product.
+    Effectively:
+    - modules in the product are moved to their position in subdesign+(Dx,Dy)
+        - module nets are taken from the product
+    - segments
+    - vias
+    there are probably thigs missing, like drawn lines, texts, zones, keepouts...
+    '''
 
     ordering = ['version', 'host', 'general', 'page', 'layers', 'setup', 'net', 'net_class', 'module', 'segment', 'via']
 
+    # TODO: a proper refactoring master->product; child-> subdesign
+    master = product
+    child = subdesign
 
     def move(item, subitem=None, newpos=None):
         '''moves item or the first subitem of item by Dx, Dy'''
@@ -49,16 +59,9 @@ def append(master,child, netlist, Dx, Dy, instance=0):
     def get_ts(tree,name,identifier='tstamp'):
         '''for each vertex of name in tree, obtain identifier like tstamp
         this unpacks the 1-tuple that make up timestamps, which may be undesirable'''
-
         ts = [ i.get_unique(identifier)[0] for i in tree(name) ]
         ts.sort()
         return ts
-
-    def get_comp_sheet_ts():
-        pass
-
-    def get_sheet_ts(sheet):
-        pass
 
     def join_path(*p):
         ans = '{}'
@@ -70,10 +73,10 @@ def append(master,child, netlist, Dx, Dy, instance=0):
                 p[i] = v[1:-1]
             elif '"' in fl:
                 raise ValueError('%s with " at one end'%v)
-
         return ans.format(os.path.normpath('/'.join(p)))
 
     merged = master
+    child = copy.copy(child)
 
     # check whether the child we got is in the netlist
     # kicad_pcb is considered corresponding to a netlist
@@ -106,17 +109,12 @@ def append(master,child, netlist, Dx, Dy, instance=0):
     child_modpath_prefix = child_sheet.get_unique('tstamps')[0]
 
     # merge nets
-    # TODO: check wether this is necessary (adds nets)
-    # This attempt is wrong - we need to prefix the child nets
     master_nets = [ name for i, name in master('net') ]
     child_nets = ( name for i, name in child('net') )
 
     for net in child_nets:
         if join_path(child_netpath_prefix, net) not in master_nets and net not in master_nets:
-            # merged_nets.append(net)
             raise ValueError('Child net not in master net')
-
-    # merged_nets = ( namedlist('net', i, net) for i, net in enumerate(merged_nets))
     # done merging nets
 
 
@@ -127,8 +125,7 @@ def append(master,child, netlist, Dx, Dy, instance=0):
         except ValueError:
             return 1
 
-    # move and add modules
-    # TODO: rather move existing modules - they have correct net
+    # move modules
     # identifying a childs module corresponding master module:
     #   the master's module has the child's path prepended by
     def obtain_from_child(master,child,name,onlythese=None):
@@ -146,40 +143,29 @@ def append(master,child, netlist, Dx, Dy, instance=0):
                     else:
                         obtain_from_child(mi, ci, name, rescursion_name)
 
-    insertpos = get_insertpos(master,'module')
-    for i, module in enumerate(child('module')):
-
-        # a module consists of the following:
-        # [ !str(footprint), layer, tedit, tstamp, at, descr, tags, path, attr, fp_text..., fp_line..., pad..., model ]
-        # of which should be taken from the child: layer, at, fp_line
-        #   for fp_text layer and at from child
-        cmodpath = module.get_unique('path')
+    # a module consists of the following:
+    # [ !str(footprint), layer, tedit, tstamp, at, descr, tags, path, attr, fp_text..., fp_line..., pad..., model ]
+    # of which should be taken from the child: layer, at, fp_line
+    #   for fp_text layer and at from child
+    # identifiable by path: /$sheetTstamp/$childModulePath
+    for i, cmod in enumerate(child('module')):
+        cmodpath = cmod.get_unique('path')
         mmodpath = join_path(child_modpath_prefix, cmodpath[0])
-        module[cmodpath.parentpos] = namedlist('path',(mmodpath,))
+        cmod[cmodpath.parentpos] = namedlist('path',(mmodpath,))
         mmod = [ i for i in master('module') if i.get_unique('path')[0] == mmodpath ]
         if len(mmod) != 1:
             raise ValueError('Child module not uniqe in master')
         else:
             mmod=mmod[0]
 
-        obtain_from_child(mmod, module, 'at')
-        obtain_from_child(mmod, module, 'layer')
-        obtain_from_child(mmod, module, 'fp_line')
-        obtain_from_child(mmod, module, 'fp_text',('layer','at'))
-
+        obtain_from_child(mmod, cmod, 'at')
+        obtain_from_child(mmod, cmod, 'layer')
+        obtain_from_child(mmod, cmod, 'fp_line')
+        obtain_from_child(mmod, cmod, 'fp_text',('layer','at'))
         move(mmod, 'at')
-        # for p,point in enumerate(mmod('fp_text') + mmod('pad') + mmod('model')):
-        #     move(point,'at')
-        # for l,line in enumerate(mmod('fp_line')):
-        #     move(line, 'start')
-        #     move(line, 'end')
-
         merged[mmod.parentpos] = mmod
-        #print('moved %i points and %i lines'%(p,l))
     print('moved %i modules'%i)
     # done adding modules
-    # TODO: move modules already there
-    # identifiable by path: /$sheetTstamp/$childModulePath
 
 
     # move and add segments
@@ -202,44 +188,14 @@ def append(master,child, netlist, Dx, Dy, instance=0):
     for name in ordering:
         orderedmerged.extend(merged(name))
 
-    #open('foobarfjauafpouvi')
-
     return orderedmerged
-
-
-def s_writer(tree, fd, line_len=70):
-    # TODO: fix top-level vertex order
-    current_linepos=0
-    def write_item(item, current_linepos):
-        fd.write('(%s '%item.name)
-        current_linepos += len(item.name)
-        for i in item:
-            if isinstance(i, namedlist):
-                current_linepos = write_item(i, current_linepos)
-            else:
-                fd.write('%s '%i)
-                current_linepos += len(str(i))
-        fd.write(')')
-        if current_linepos > line_len:
-            fd.write('\n')
-            current_linepos = 0
-        return current_linepos
-
-    if isinstance(fd,str):
-        import os.path
-        if os.path.exists(fd):
-            raise ValueError('fd is a path that exists, not overwriting')
-        fd = open(fd,'w')
-
-    write_item(tree, 0)
-    fd.flush()
 
 if __name__ == '__main__':
     child = s_file_parse('test-rc/rc.kicad_pcb')
     master = s_file_parse('test-rc/2x rc.kicad_pcb')
     netlist = s_file_parse('test-rc/2x rc.net')
-    merged = append(master, child, netlist, 10, 20)
+    merged = adopt_subdesign(master, child, netlist, 10, 20)
     child = s_file_parse('test-rc/rc.kicad_pcb')
-    merged = append(master, child, netlist, 30, 20,instance=1)
-    s_writer(merged,'/tmp/merged.kicad_pcb')
+    merged = adopt_subdesign(master, child, netlist, 30, 20,instance=1)
+    s_file_write(merged,'/tmp/merged.kicad_pcb')
 

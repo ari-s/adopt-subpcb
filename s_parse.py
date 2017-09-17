@@ -56,6 +56,7 @@ def get_scalar(cfactory,c):
     return scalar, c
 
 def get_str(cfactory):
+    '''get the string (chars up to next ") - call only when at start of such a string'''
     result = ''
     for c in cfactory:
         if c != '"':
@@ -116,3 +117,35 @@ def s_file_parse(fn, fn_tag='filename'):
         raise ValueError('attempting to overwrite tag %s when inserting filename' % fn_tag)
 
     return(s_file)
+
+def s_file_write(tree, fd, line_len=70):
+    '''write an s_expression file. Note that
+    outfd = open('/tmp/foobar','w')
+    s_file_write(s_file_parse(fn),fd)
+    at least destroys formatting of fn. Also, Dragons.'''
+
+    # TODO: fix top-level vertex order
+    current_linepos=0
+    def write_item(item, current_linepos):
+        fd.write('(%s '%item.name)
+        current_linepos += len(item.name)
+        for i in item:
+            if isinstance(i, namedlist):
+                current_linepos = write_item(i, current_linepos)
+            else:
+                fd.write('%s '%i)
+                current_linepos += len(str(i))
+        fd.write(')')
+        if current_linepos > line_len:
+            fd.write('\n')
+            current_linepos = 0
+        return current_linepos
+
+    if isinstance(fd,str):
+        import os.path
+        if os.path.exists(fd):
+            raise ValueError('fd is a path that exists, not overwriting')
+        fd = open(fd,'w')
+
+    write_item(tree, 0)
+    fd.flush()
