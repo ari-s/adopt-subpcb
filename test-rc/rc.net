@@ -1,0 +1,62 @@
+(export (version D)
+  (design
+    (source /home/arian-debian/projekte/kicad-instantiate/test-rc/rc.sch)
+    (date "Sun 17 Sep 2017 13:44:57 CEST")
+    (tool "Eeschema 4.0.6+dfsg1-1")
+    (sheet (number 1) (name /) (tstamps /)
+      (title_block
+        (title)
+        (company)
+        (rev)
+        (date)
+        (source rc.sch)
+        (comment (number 1) (value ""))
+        (comment (number 2) (value ""))
+        (comment (number 3) (value ""))
+        (comment (number 4) (value "")))))
+  (components
+    (comp (ref R1)
+      (value R)
+      (footprint Resistors_SMD:R_0805_HandSoldering)
+      (libsource (lib device) (part R))
+      (sheetpath (names /) (tstamps /))
+      (tstamp 5932F03B))
+    (comp (ref C1)
+      (value C)
+      (footprint Capacitors_SMD:C_0805_HandSoldering)
+      (libsource (lib device) (part C))
+      (sheetpath (names /) (tstamps /))
+      (tstamp 5932F0A8)))
+  (libparts
+    (libpart (lib device) (part C)
+      (description "Unpolarized capacitor")
+      (footprints
+        (fp C_*))
+      (fields
+        (field (name Reference) C)
+        (field (name Value) C))
+      (pins
+        (pin (num 1) (name ~) (type passive))
+        (pin (num 2) (name ~) (type passive))))
+    (libpart (lib device) (part R)
+      (description Resistor)
+      (footprints
+        (fp R_*)
+        (fp R_*))
+      (fields
+        (field (name Reference) R)
+        (field (name Value) R))
+      (pins
+        (pin (num 1) (name ~) (type passive))
+        (pin (num 2) (name ~) (type passive)))))
+  (libraries
+    (library (logical device)
+      (uri /usr/share/kicad/library/device.lib)))
+  (nets
+    (net (code 1) (name /Out)
+      (node (ref R1) (pin 1))
+      (node (ref C1) (pin 1)))
+    (net (code 2) (name GND)
+      (node (ref C1) (pin 2)))
+    (net (code 3) (name /In)
+      (node (ref R1) (pin 2)))))
